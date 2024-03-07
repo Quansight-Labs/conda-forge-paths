@@ -29,12 +29,8 @@ jobs:
           path: conda-forge-paths
 
       - name: Clone Artifacts
-        uses: actions/checkout@v3
-        with:
-          repository: regro/libcfgraph
-          path: libcfgraph
-          sparse-checkout: artifacts
-          fetch-depth: 1
+        run: |
+          git clone --depth 1 https://github.com/regro/libcfgraph.git ${{ github.workspace }}/libcfgraph
 
       - name: Verify cloned repos
         run: |
