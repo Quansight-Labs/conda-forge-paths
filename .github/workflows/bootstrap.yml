@@ -1,0 +1,62 @@
+name: Bootstrap database from libcfgraph
+
+on: [push, workflow_dispatch]
+
+env:
+  DB_PATH: ${{ github.workspace }}/path_to_artifacts.db
+  THIS_REPO: ${{ github.workspace }}/conda-forge-paths
+
+concurrency:
+  # Concurrency group that uses the workflow name and PR number if available
+  # or commit SHA as a fallback. If a new build is triggered under that
+  # concurrency group while a previous build is running it will be canceled.
+  # Repeated pushes to a PR will cancel all previous builds, while multiple
+  # merges to main will not cancel.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          path: conda-forge-paths
+
+      - name: Clone Artifacts
+        uses: actions/checkout@v3
+        with:
+          repository: regro/libcfgraph
+          path: libcfgraph
+          sparse-checkout: artifacts
+          fetch-depth: 1
+
+      - name: Verify cloned repos
+        run: |
+          ls -lat $THIS_REPO
+          ls -lat ${{ github.workspace }}/libcfgraph
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Populate artifact and files tables
+        run: |
+          python $THIS_REPO/conda_forge_paths/bootstrap_path_to_artifact_from_libcfgraph.py \
+            bootstrap ${{ github.workspace }}/libcfgraph/artifacts
+
+      - name: Compress DB file
+        run: |
+          ZSTD_NBTHREADS=4 ZSTD_CLEVEL=19 tar --zstd -cf $DB_PATH.tar.zstd $DB_PATH
+          ll -h "$DB_PATH"*
+
+      - name: "Upload Artifact"
+        uses: actions/upload-artifact@v3
+        with:
+          name: database
+          path: ${{ env.DB_PATH }}.tar.zstd
