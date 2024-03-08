@@ -65,8 +65,8 @@ def query(db, q):
         FROM ArtifactToJson, json_each(data, "$.files")
         WHERE json_each.value = (?)
         LIMIT 10
-        """, 
-        (q,)
+        """,
+        (q,),
     ):
         print("-", row)
     print(f"Query took {time.time() - t0:.2f} seconds")

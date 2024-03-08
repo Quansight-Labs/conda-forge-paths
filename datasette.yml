@@ -1,0 +1,26 @@
+# Serve UI with:
+# datasette serve -i path_to_artifacts.db -m datasette.yml
+databases:
+  path_to_artifacts:
+    queries:
+      find_artifacts:
+        title: Find artifacts by full path (exact match)
+        params:
+          - path
+        sql: |-
+          SELECT group_concat(artifact, x'0a') 
+          FROM Artifacts, PathToArtifactIds, json_each('[' || PathToArtifactIds.artifact_ids || ']') as each_id
+          WHERE PathToArtifactIds.path = :path AND each_id.value = Artifacts.id
+          LIMIT 1
+        hide_sql: true
+      find_files:
+        title: Find full paths (match by path components)
+        params:
+          - path
+        sql: |-
+          SELECT highlight(PathToArtifactIds_fts, 0, '*', '*')
+          FROM PathToArtifactIds_fts
+          WHERE PathToArtifactIds_fts MATCH escape_fts(:path)
+          ORDER BY bm25(PathToArtifactIds_fts)
+          LIMIT 100
+        hide_sql: true
