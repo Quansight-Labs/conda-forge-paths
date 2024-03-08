@@ -19,8 +19,8 @@ def connect(bootstrap=False):
             """
             CREATE TABLE IF NOT EXISTS Artifacts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                artifact TEXT,
-                timestamp INTEGER
+                artifact TEXT NOT NULL UNIQUE,
+                timestamp INTEGER DEFAULT 0 NOT NULL
             );
             CREATE TABLE IF NOT EXISTS PathToArtifactIds (
                 path TEXT PRIMARY KEY,
