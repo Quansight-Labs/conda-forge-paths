@@ -3,6 +3,7 @@ import os
 import sqlite3
 import sys
 import time
+from datetime import datetime, UTC
 from itertools import batched
 from pathlib import Path
 
@@ -141,15 +142,24 @@ def query(db, q, limit=100, fts=False):
     else:
         for row in db.execute(
             f"""
-            SELECT group_concat(artifact, x'0a') 
+            SELECT artifact
             FROM Artifacts, PathToArtifactIds, json_each('[' || PathToArtifactIds.artifact_ids || ']') as each_id
             WHERE PathToArtifactIds.path = (?) AND each_id.value = Artifacts.id
-            LIMIT {limit}
             """,
             (q,),
         ):
             yield row
 
+def most_recent_artifact(db):
+    for row in db.execute(
+        """
+        SELECT artifact, timestamp
+        FROM Artifacts
+        ORDER BY timestamp DESC
+        LIMIT 1
+        """
+    ):
+        return row
 
 if __name__ == "__main__":
     if len(sys.argv) == 3:
@@ -160,27 +170,39 @@ if __name__ == "__main__":
             bootstrap_from_libcfgraph_path_to_artifact(db, artifacts_dir)
             db.commit()
             db.close()
-        elif action in ("find-artifacts", "find-paths"):
+            sys.exit()
+
+        if action in ("find-artifacts", "find-paths"):
             db = connect()
             t0 = time.time()
-            for row in query(db, sys.argv[2], fts=action == "find-paths"):
-                print(*row, sep="\n")
+            for i, row in enumerate(query(db, sys.argv[2], fts=action == "find-paths")):
+                print(f"{i}) {row[0]}")
             print(f"Query took {time.time() - t0:.4f} seconds")
             db.close()
-    elif len(sys.argv) == 2 and sys.argv[1] == "fts":
-        db = connect()
-        t0 = time.time()
-        index_full_text_search(db)
-        print(f"FTS indexing took {time.time() - t0:.4f} seconds")
-        db.close()
-    else:
-        print(
-            f"Usage: {sys.argv[0]} subcommand",
-            "subcommands:" ,
-            "  - bootstrap /path/to/libcfgraph/artifacts/  # initialize the database",
-            "  - fts                                       # index the full text search",
-            "  - [find-artifacts <full path>               # find artifacts by full path",
-            "  - find-paths <path component>               # find full paths by partial matches",
-            sep="\n"
-        )
-        sys.exit(1)
+            sys.exit()
+
+    if len(sys.argv) == 2:
+        if sys.argv[1] == "fts":
+            db = connect()
+            t0 = time.time()
+            index_full_text_search(db)
+            print(f"FTS indexing took {time.time() - t0:.4f} seconds")
+            db.close()
+            sys.exit()
+        if sys.argv[1] == "most-recent-artifact":
+            db = connect()
+            name, ts = most_recent_artifact(db)
+            print(name, ts / 1000, datetime.fromtimestamp(ts / 1000, UTC).strftime("%Y-%m-%d %H:%M:%S %Z"))
+            db.close()
+            sys.exit()
+    
+    print(
+        f"Usage: {sys.argv[0]} subcommand",
+        "subcommands:" ,
+        "  - bootstrap /path/to/libcfgraph/artifacts/  # initialize the database",
+        "  - fts                                       # index the full text search",
+        "  - [find-artifacts <full path>               # find artifacts by full path",
+        "  - find-paths <path component>               # find full paths by partial matches",
+        sep="\n"
+    )
+    sys.exit(1)
