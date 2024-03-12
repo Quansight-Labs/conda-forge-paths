@@ -161,3 +161,4 @@ cython_debug/
 
 *.db
 *.zst
+.repodata_cache/

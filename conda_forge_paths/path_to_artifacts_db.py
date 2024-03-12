@@ -3,11 +3,21 @@ import os
 import sqlite3
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, UTC
-from itertools import batched
+from itertools import batched, chain, product
 from pathlib import Path
 
-from tqdm.auto import tqdm
+from conda_forge_metadata.artifact_info import get_artifact_info_as_json
+from conda_forge_metadata.repodata import SUBDIRS, fetch_repodata, all_labels
+
+try:
+    from tqdm.auto import tqdm
+except ImportError:
+
+    def tqdm(iterator, *args, **kwargs):
+        return iterator
+
 
 DBPATH = "path_to_artifacts.db"
 
@@ -150,6 +160,7 @@ def query(db, q, limit=100, fts=False):
         ):
             yield row
 
+
 def most_recent_artifact(db):
     for row in db.execute(
         """
@@ -160,6 +171,172 @@ def most_recent_artifact(db):
         """
     ):
         return row
+
+
+def new_artifacts(ts):
+    futures = []
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        for label, subdir in product(all_labels(use_remote_cache=True), SUBDIRS):
+            future = executor.submit(
+                fetch_repodata, (subdir,), False, ".repodata_cache", label
+            )
+            futures.append(future)
+        for future in tqdm(
+            as_completed(futures), total=len(futures), desc="Fetching repodata"
+        ):
+            repodatas = future.result()
+            for repodata in repodatas:
+                subdir, label = repodata.stem.split(".", 1)
+                if label == "main":
+                    channel = "cf"
+                else:
+                    channel = f"cf-{label}"
+                try:
+                    data = json.loads(repodata.read_text())
+                except Exception as e:
+                    print(f"Error reading {repodata}: {e}")
+                    continue
+                keys = {"packages": ".tar.bz", "packages.conda": ".conda"}
+                for key, ext in keys.items():
+                    for pkg, pkg_data in data.get(key, {}).items():
+                        timestamp = pkg_data.get("timestamp", 0)
+                        if timestamp > ts:
+                            yield (
+                                f"{channel}/{subdir}/{pkg[:-len(ext)]}",
+                                timestamp,
+                                ext,
+                            )
+
+                for pkg in data.get("removed", ()):
+                    ext = ".tar.bz2" if pkg.endswith(".tar.bz2") else ".conda"
+                    yield (f"{channel}/{subdir}/{pkg[:-len(ext)]}", 0, ext)
+
+
+def files_from_artifact(artifact):
+    time.sleep(0.1)
+    channel, subdir, artifact = artifact.rsplit("/", 2)
+    if "-" in channel:
+        channel, label = channel.split("-", 1)
+        channel = "https://conda.anaconda.org/conda-forge/label/" + label
+    else:
+        channel = "conda-forge"
+
+    if artifact.endswith(".conda"):
+        # .conda artifacts can be streamed directly from an anaconda.org channel
+        return get_artifact_info_as_json(
+            channel=channel,
+            subdir=subdir,
+            artifact=artifact,
+            backend="streamed",
+            skip_files_suffixes=(),
+        )
+    # .tar.bz2 artifacts need to be downloaded and extracted, but the OCI mirror has
+    # the info layer that we can use to get the files list
+    data = get_artifact_info_as_json(
+        channel=channel,
+        subdir=subdir,
+        artifact=artifact,
+        backend="oci",
+        skip_files_suffixes=(),
+    )
+    if data and data.get("name"):
+        return data
+
+
+def update_from_repodata(db):
+    most_recent_name, most_recent_ts = most_recent_artifact(db)
+    print(
+        "Most recent artifact:",
+        most_recent_name,
+        "@",
+        most_recent_ts / 1000,
+        datetime.fromtimestamp(most_recent_ts / 1000, UTC).strftime(
+            "%Y-%m-%d %H:%M:%S %Z"
+        ),
+    )
+    to_add, null_ts_artifacts = [], []
+    for artifact, ts, ext in sorted(
+        tqdm(new_artifacts(most_recent_ts), desc="Identifying artifacts to add"),
+        key=lambda x: x[1],  # sort by timestamp
+    ):
+        if not ts:  # broken artifacts have ts = 0
+            null_ts_artifacts.append(artifact)
+        else:
+            to_add.append((artifact, ts, ext))
+
+    for batch in batched(
+        tqdm(
+            chain(to_add, null_ts_artifacts),
+            desc="Adding artifacts",
+            leave=False,
+            total=len(to_add) + len(null_ts_artifacts),
+        ),
+        100,
+    ):
+        ids = db.execute(
+            """
+            INSERT INTO Artifacts (artifact, timestamp) 
+            VALUES {values}
+                ON CONFLICT(artifact) DO NOTHING
+            RETURNING *
+            """.format(
+                values=", ".join(f"('{name}', {ts})" for name, ts, _ in batch)
+            )
+        )
+        name_to_id = {name: id_ for id_, name, _ in ids}
+        files_to_artifact = {}
+        failed_artifacts = []
+        futures = []
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {
+                executor.submit(files_from_artifact, name + ext): name
+                for name, _, ext in batch
+            }
+            for future in tqdm(
+                as_completed(futures),
+                total=len(futures),
+                desc="Fetching files",
+                leave=False,
+            ):
+                name = futures[future]
+                try:
+                    data = future.result()
+                except Exception:
+                    data = None
+                if data:
+                    for f in data.get("files", ()):
+                        files_to_artifact.setdefault(f, []).append(name)
+                else:
+                    failed_artifacts.append(name)
+
+        db.executemany(
+            """
+            INSERT INTO PathToArtifactIds (path, basename, artifact_ids) 
+            VALUES (?, ?, ?)
+            ON CONFLICT(path) DO 
+                UPDATE SET artifact_ids = artifact_ids || ',' || excluded.artifact_ids
+            """,
+            (
+                (
+                    path,
+                    os.path.basename(path),
+                    ",".join([str(name_to_id[artifact]) for artifact in artifacts]),
+                )
+                for path, artifacts in files_to_artifact.items()
+            ),
+        )
+        if failed_artifacts:
+            # Remove from the Artifacts table so we retry at some point
+            db.execute(
+                """
+                DELETE FROM Artifacts
+                WHERE artifact IN ({})
+                """.format(
+                    ", ".join(f"'{name}'" for name in failed_artifacts)
+                )
+            )
+        db.commit()
+
 
 if __name__ == "__main__":
     if len(sys.argv) == 3:
@@ -189,20 +366,32 @@ if __name__ == "__main__":
             print(f"FTS indexing took {time.time() - t0:.4f} seconds")
             db.close()
             sys.exit()
+
         if sys.argv[1] == "most-recent-artifact":
             db = connect()
             name, ts = most_recent_artifact(db)
-            print(name, ts / 1000, datetime.fromtimestamp(ts / 1000, UTC).strftime("%Y-%m-%d %H:%M:%S %Z"))
+            print(
+                name,
+                ts / 1000,
+                datetime.fromtimestamp(ts / 1000, UTC).strftime("%Y-%m-%d %H:%M:%S %Z"),
+            )
             db.close()
             sys.exit()
-    
+
+        if sys.argv[1] == "update-from-repodata":
+            db = connect()
+            update_from_repodata(db)
+            db.close()
+            sys.exit()
+
     print(
         f"Usage: {sys.argv[0]} subcommand",
-        "subcommands:" ,
+        "subcommands:",
         "  - bootstrap /path/to/libcfgraph/artifacts/  # initialize the database",
         "  - fts                                       # index the full text search",
         "  - [find-artifacts <full path>               # find artifacts by full path",
         "  - find-paths <path component>               # find full paths by partial matches",
-        sep="\n"
+        "  - update-from-repodata                      # update the database from current repodata",
+        sep="\n",
     )
     sys.exit(1)
