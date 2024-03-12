@@ -30,10 +30,14 @@ jobs:
           curl -L -o path_to_artifacts.tar.zst \
             https://github.com/jaimergp/conda-forge-paths/releases/latest/download/path_to_artifacts.tar.zst
           tar xf path_to_artifacts.tar.zst
+          rm path_to_artifacts.tar.zst
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
       - name: Update database with most recent repodata
         run: |
