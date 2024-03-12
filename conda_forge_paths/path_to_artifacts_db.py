@@ -430,7 +430,7 @@ if __name__ == "__main__":
         "subcommands:",
         "  - bootstrap /path/to/libcfgraph/artifacts/  # initialize the database",
         "  - fts                                       # index the full text search",
-        "  - [find-artifacts <full path>               # find artifacts by full path",
+        "  - find-artifacts <full path>               # find artifacts by full path",
         "  - find-paths <path component>               # find full paths by partial matches",
         "  - update-from-repodata                      # update the database from current repodata",
         sep="\n",
