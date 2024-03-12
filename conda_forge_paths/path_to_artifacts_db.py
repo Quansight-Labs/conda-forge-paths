@@ -1,3 +1,4 @@
+import bz2
 import json
 import os
 import sqlite3
@@ -7,9 +8,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, UTC
 from itertools import batched, chain, product
 from pathlib import Path
+from urllib.request import urlretrieve
 
 from conda_forge_metadata.artifact_info import get_artifact_info_as_json
-from conda_forge_metadata.repodata import SUBDIRS, fetch_repodata, all_labels
+from conda_forge_metadata.repodata import SUBDIRS, all_labels
 
 try:
     from tqdm.auto import tqdm
@@ -171,6 +173,34 @@ def most_recent_artifact(db):
         """
     ):
         return row
+
+
+def fetch_repodata(
+    subdirs=SUBDIRS,
+    force_download=False,
+    cache_dir=".repodata_cache",
+    label="main",
+):
+    assert all(subdir in SUBDIRS for subdir in subdirs)
+    paths = []
+    for subdir in subdirs:
+        prefix = "https://conda.anaconda.org/conda-forge"
+        if label == "main":
+            # We don't need patches, and this way we can get 'removed' items with timestamps
+            repodata = f"{prefix}/{subdir}/repodata_from_packages.json"
+        else:
+            repodata = f"{prefix}/label/{label}/{subdir}/repodata.json"
+        local_fn = Path(cache_dir, f"{subdir}.{label}.json")
+        local_fn_bz2 = Path(str(local_fn) + ".bz2")
+        paths.append(local_fn)
+        if force_download or not local_fn.exists():
+            local_fn.parent.mkdir(parents=True, exist_ok=True)
+            # Download the file
+            urlretrieve(f"{repodata}.bz2", local_fn_bz2)
+            with open(local_fn_bz2, "rb") as compressed, open(local_fn, "wb") as f:
+                f.write(bz2.decompress(compressed.read()))
+            local_fn_bz2.unlink()
+    return paths
 
 
 def new_artifacts(ts):
@@ -335,6 +365,8 @@ def update_from_repodata(db):
                     ", ".join(f"'{name}'" for name in failed_artifacts)
                 )
             )
+            with open("failed_artifacts.txt", "a") as f:
+                f.write("\n".join(failed_artifacts) + "\n")
         db.commit()
 
 
@@ -382,6 +414,15 @@ if __name__ == "__main__":
             db = connect()
             update_from_repodata(db)
             db.close()
+            failed = Path("failed_artifacts.txt")
+            if failed.is_file():
+                print(
+                    "!! Couldn't fetch these artifacts, please retry:",
+                    failed.read_text(),
+                    sep="\n",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
             sys.exit()
 
     print(

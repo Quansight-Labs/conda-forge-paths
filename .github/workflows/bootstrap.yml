@@ -1,4 +1,4 @@
-name: Bootstrap database from libcfgraph
+name: Update database
 
 on: [push, workflow_dispatch]
 
@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-push:
+  update:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -28,7 +28,7 @@ jobs:
       - name: Fetch latest release
         run: |
           curl -L -o path_to_artifacts.tar.zst \
-            https://github.com/$GITHUB_REPOSITORY/releases/latest/path_to_artifacts.tar.zst
+            https://github.com/jaimergp/conda-forge-paths/releases/latest/download/path_to_artifacts.tar.zst
           tar xf path_to_artifacts.tar.zst
 
       - uses: actions/setup-python@v5
@@ -39,14 +39,14 @@ jobs:
         run: |
           set -x
           ll -h *.db
-          python $THIS_REPO/conda_forge_paths/path_to_artifacts.db.py update-from-repodata
+          python conda_forge_paths/path_to_artifacts.db.py update-from-repodata
           ll -h *.db
       
       - name: Update FTS index
         run: |
           set -x
           ll -h *.db
-          python $THIS_REPO/conda_forge_paths/path_to_artifacts.db.py fts
+          python conda_forge_paths/path_to_artifacts.db.py fts
           ll -h *.db
 
       - name: Compress DB file
