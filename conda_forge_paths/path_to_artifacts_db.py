@@ -314,7 +314,7 @@ def update_from_repodata(db):
             leave=False,
             total=len(to_add) + len(null_ts_artifacts),
         ),
-        100,
+        1000,
     ):
         ids = db.execute(
             """
@@ -340,6 +340,7 @@ def update_from_repodata(db):
                 total=len(futures),
                 desc="Fetching files",
                 leave=False,
+                disable=os.environ.get("CI"),
             ):
                 name = futures[future]
                 try:
