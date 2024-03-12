@@ -18,6 +18,9 @@ try:
 except ImportError:
 
     def tqdm(iterator, *args, **kwargs):
+        desc = kwargs.pop("desc", "")
+        if desc:
+            print(desc)
         return iterator
 
 
@@ -173,6 +176,16 @@ def most_recent_artifact(db):
         """
     ):
         return row
+
+
+def count_artifacts(db):
+    for row in db.execute(
+        """
+        SELECT COUNT(*)
+        FROM Artifacts
+        """
+    ):
+        return row[0]
 
 
 def fetch_repodata(
@@ -412,7 +425,16 @@ if __name__ == "__main__":
 
         if sys.argv[1] == "update-from-repodata":
             db = connect()
+            print("Artifacts before update:", count_artifacts(db))
             update_from_repodata(db)
+            print("Artifacts after update:", count_artifacts(db))
+            name, ts = most_recent_artifact(db)
+            print(
+                "Most recent one:",
+                name,
+                ts / 1000,
+                datetime.fromtimestamp(ts / 1000, UTC).strftime("%Y-%m-%d %H:%M:%S %Z"),
+            )
             db.close()
             failed = Path("failed_artifacts.txt")
             if failed.is_file():

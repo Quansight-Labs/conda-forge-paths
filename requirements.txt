@@ -1,1 +1,2 @@
 conda-forge-metadata>=0.8
+tqdm

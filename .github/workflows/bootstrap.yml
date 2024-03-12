@@ -4,6 +4,7 @@ on: [push, workflow_dispatch]
 
 env:
   DB_PATH: ${{ github.workspace }}/path_to_artifacts.db
+  PYTHONUNBUFFERED: 1
 
 concurrency:
   # Concurrency group that uses the workflow name and PR number if available
@@ -27,6 +28,7 @@ jobs:
 
       - name: Fetch latest release
         run: |
+          set -x
           curl -L -o path_to_artifacts.tar.zst \
             https://github.com/jaimergp/conda-forge-paths/releases/latest/download/path_to_artifacts.tar.zst
           tar xf path_to_artifacts.tar.zst
