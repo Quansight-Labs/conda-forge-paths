@@ -377,7 +377,7 @@ def update_from_repodata(db):
                 DELETE FROM Artifacts
                 WHERE artifact IN ({})
                 """.format(
-                    ", ".join(f"'{name}'" for name in failed_artifacts)
+                    ", ".join(f"'{name}'" for name, _ in failed_artifacts)
                 )
             try:
                 db.execute(q)
