@@ -388,8 +388,11 @@ def update_from_repodata(db):
                 except Exception as exc:
                     failed_artifacts.append((name, str(exc)))
                 else:
-                    for f in data.get("files", ()):
-                        files_to_artifact.setdefault(f, []).append(name)
+                    if data is None:
+                        failed_artifacts((name, "Empty metadata payload"))
+                    else:
+                        for f in data.get("files", ()):
+                            files_to_artifact.setdefault(f, []).append(name)
 
         db.executemany(
             """
