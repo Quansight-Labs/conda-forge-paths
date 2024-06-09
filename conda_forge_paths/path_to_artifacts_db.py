@@ -156,7 +156,7 @@ def query(db, q, limit=100, fts=False):
             yield row
     else:
         for row in db.execute(
-            f"""
+            """
             SELECT artifact
             FROM Artifacts, PathToArtifactIds, json_each('[' || PathToArtifactIds.artifact_ids || ']') as each_id
             WHERE PathToArtifactIds.path = (?) AND each_id.value = Artifacts.id
@@ -345,13 +345,11 @@ def update_from_repodata(db):
                 name = futures[future]
                 try:
                     data = future.result()
-                except Exception:
-                    data = None
-                if data:
+                except Exception as exc:
+                    failed_artifacts.append((name, str(exc)))
+                else:
                     for f in data.get("files", ()):
                         files_to_artifact.setdefault(f, []).append(name)
-                else:
-                    failed_artifacts.append(name)
 
         db.executemany(
             """
@@ -440,11 +438,13 @@ if __name__ == "__main__":
             failed = Path("failed_artifacts.txt")
             if failed.is_file():
                 print(
-                    "!! Couldn't fetch these artifacts, please retry:",
-                    failed.read_text(),
-                    sep="\n",
-                    file=sys.stderr,
+                    "!! Couldn't fetch these artifacts, please retry:", file=sys.stderr
                 )
+                with open(failed) as f:
+                    for i, line in enumerate(f, 1):
+                        print(f"{i}.", line, file=sys.stderr)
+                        if i >= 100:
+                            print("... more than 100 errors. Omitting.")
                 sys.exit(1)
             sys.exit()
 

@@ -1,10 +1,13 @@
 name: Update database
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches:
+      - main
 
-env:
-  DB_PATH: ${{ github.workspace }}/path_to_artifacts.db
-  PYTHONUNBUFFERED: 1
+  pull_request:
+
+  workflow_dispatch:
 
 concurrency:
   # Concurrency group that uses the workflow name and PR number if available
@@ -14,6 +17,10 @@ concurrency:
   # merges to main will not cancel.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
+
+env:
+  DB_PATH: ${{ github.workspace }}/path_to_artifacts.db
+  PYTHONUNBUFFERED: 1
 
 jobs:
   update:
@@ -37,7 +44,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
@@ -47,7 +54,7 @@ jobs:
           ls -alh *.db
           python conda_forge_paths/path_to_artifacts_db.py update-from-repodata
           ls -alh *.db
-      
+
       - name: Update FTS index
         run: |
           set -x
@@ -62,6 +69,7 @@ jobs:
 
       - name: "Upload Artifact"
         uses: actions/upload-artifact@v3
+        if: github.event_name != 'pull_request'
         with:
           name: database
           path: ${{ env.DB_PATH }}.tar.zstd
