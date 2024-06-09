@@ -160,5 +160,11 @@ cython_debug/
 #.idea/
 
 *.db
+*.db-journal
 *.zst
 .repodata_cache/
+
+# pixi environments
+.pixi
+*.egg-info
+
