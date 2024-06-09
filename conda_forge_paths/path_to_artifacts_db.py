@@ -332,7 +332,7 @@ def update_from_repodata(db):
     and delete those form the Artifacts table so they are retried eventually.
     """
     start_from = (
-        get_latest_successful_update() or 1701843236881
+        get_latest_successful_update(db) or 1701843236881
     )  # Dec 2023 (last libcfgraph item)
     print(
         "Starting from",
