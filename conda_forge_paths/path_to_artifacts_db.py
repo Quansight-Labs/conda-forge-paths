@@ -351,6 +351,10 @@ def update_from_repodata(db):
                     for f in data.get("files", ()):
                         files_to_artifact.setdefault(f, []).append(name)
 
+                # if len(failed_artifacts) > 100:
+                #     print("Too many errors!", file=sys.stderr)
+                #     print(*failed_artifacts, sep="\n", file=sys.stderr)
+                #     sys.exit(1)
         db.executemany(
             """
             INSERT INTO PathToArtifactIds (path, basename, artifact_ids) 
@@ -369,14 +373,17 @@ def update_from_repodata(db):
         )
         if failed_artifacts:
             # Remove from the Artifacts table so we retry at some point
-            db.execute(
-                """
+            q = """
                 DELETE FROM Artifacts
                 WHERE artifact IN ({})
                 """.format(
                     ", ".join(f"'{name}'" for name in failed_artifacts)
                 )
-            )
+            try:
+                db.execute(q)
+            except sqlite3.OperationalError as exc:
+                print(q)
+                raise exc
             with open("failed_artifacts.txt", "a") as f:
                 f.write("\n".join(failed_artifacts) + "\n")
         db.commit()
