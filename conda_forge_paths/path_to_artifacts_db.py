@@ -43,6 +43,10 @@ def connect(bootstrap=False):
                 basename TEXT,
                 artifact_ids TEXT
             );
+            CREATE TABLE IF NOT EXISTS LatestSuccessfulUpdate (
+                id INTEGER PRIMARY KEY CHECK (id = 0),
+                timestamp INTEGER DEFAULT 0 NOT NULL
+            );
             PRAGMA journal_mode = OFF;
             PRAGMA synchronous = 0;
             PRAGMA cache_size = 1000000;
@@ -169,7 +173,7 @@ def query(db, q, limit=100, fts=False):
             yield row
 
 
-def most_recent_artifact(db):
+def most_recent_artifact(db) -> tuple[str, int]:
     for row in db.execute(
         """
         SELECT artifact, timestamp
@@ -179,6 +183,34 @@ def most_recent_artifact(db):
         """
     ):
         return row
+
+
+def get_latest_successful_update(db):
+    try:
+        for row in db.execute(
+            "SELECT timestamp from LatestSuccessfulUpdate WHERE id = 0"
+        ):
+            return row[0]
+    except sqlite3.OperationalError as exc:
+        print("!! Warning:", exc)
+        return 0
+
+
+def set_latest_successful_update(db, timestamp: int | None = None):
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS LatestSuccessfulUpdate (
+            id INTEGER PRIMARY KEY CHECK (id = 0),
+            timestamp INTEGER DEFAULT 0 NOT NULL
+        );
+        """
+    )
+    if timestamp is None:
+        _, timestamp = most_recent_artifact(db)
+    db.execute(
+        "UPDATE LatestSuccessfulUpdate SET timestamp = (?) WHERE id = 0",
+        (timestamp,),
+    )
 
 
 def count_artifacts(db):
@@ -298,12 +330,15 @@ def update_from_repodata(db):
     to query the actual info/ metadata remotely. These queries can fail
     due to network issues and whatnot, so we catch potential exceptions
     and delete those form the Artifacts table so they are retried eventually.
-
-    We always start from the same date, Dec 2023, because that's the last update
-    we obtained via libcfgraph. We don't want to drop artifacts just because they
-    failed and we then added more recent artifacts to the table.
     """
-    start_from = 1701843236881  # 2023-12-06 06:13:56 UTC
+    start_from = (
+        get_latest_successful_update() or 1701843236881
+    )  # Dec 2023 (last libcfgraph item)
+    print(
+        "Starting from",
+        start_from / 1000,
+        datetime.fromtimestamp(start_from / 1000, UTC).strftime("%Y-%m-%d %H:%M:%S %Z"),
+    )
     to_add, null_ts_artifacts = [], []
     for artifact, ts, ext in sorted(
         tqdm(new_artifacts(start_from), desc="Identifying artifacts to add"),
@@ -429,6 +464,16 @@ if __name__ == "__main__":
             db.close()
             sys.exit()
 
+        if sys.argv[1] == "most-recent-successful-update":
+            db = connect()
+            ts = get_latest_successful_update(db)
+            print(
+                ts / 1000,
+                datetime.fromtimestamp(ts / 1000, UTC).strftime("%Y-%m-%d %H:%M:%S %Z"),
+            )
+            db.close()
+            sys.exit()
+
         if sys.argv[1] == "update-from-repodata":
             db = connect()
             print("Artifacts before update:", count_artifacts(db))
@@ -453,16 +498,20 @@ if __name__ == "__main__":
                         if i >= 100:
                             print("... more than 100 errors. Omitting.")
                 sys.exit(1)
-            sys.exit()
+            else:
+                # Update epoch timestamp because no errors happened :D
+                set_latest_successful_update()
+                sys.exit()
 
     print(
         f"Usage: {sys.argv[0]} subcommand",
         "subcommands:",
         "  - bootstrap /path/to/libcfgraph/artifacts/  # initialize the database",
         "  - fts                                       # index the full text search",
-        "  - find-artifacts <full path>               # find artifacts by full path",
+        "  - find-artifacts <full path>                # find artifacts by full path",
         "  - find-paths <path component>               # find full paths by partial matches",
         "  - update-from-repodata                      # update the database from current repodata",
+        "  - most-recent-artifact                      # print latest artifact in database",
         sep="\n",
     )
     sys.exit(1)
