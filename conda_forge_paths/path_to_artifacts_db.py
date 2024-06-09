@@ -73,9 +73,12 @@ def bootstrap_from_libcfgraph_path_to_artifact(db, artifacts_dir):
                 )
                 for path in data["files"]:
                     mapping.setdefault(path, []).append(artifact)
-            yield artifacts_timestamp, (
-                (path, os.path.basename(path), artifacts)
-                for path, artifacts in mapping.items()
+            yield (
+                artifacts_timestamp,
+                (
+                    (path, os.path.basename(path), artifacts)
+                    for path, artifacts in mapping.items()
+                ),
             )
 
     db.execute("BEGIN")
@@ -287,19 +290,23 @@ def files_from_artifact(artifact):
 
 
 def update_from_repodata(db):
-    most_recent_name, most_recent_ts = most_recent_artifact(db)
-    print(
-        "Most recent artifact:",
-        most_recent_name,
-        "@",
-        most_recent_ts / 1000,
-        datetime.fromtimestamp(most_recent_ts / 1000, UTC).strftime(
-            "%Y-%m-%d %H:%M:%S %Z"
-        ),
-    )
+    """
+    The artifacts table always stores all the filenames in the repodata.
+    It serves as an inventory and also a todo list.
+
+    On Artifacts updates, we gather the newly added rows and use those
+    to query the actual info/ metadata remotely. These queries can fail
+    due to network issues and whatnot, so we catch potential exceptions
+    and delete those form the Artifacts table so they are retried eventually.
+
+    We always start from the same date, Dec 2023, because that's the last update
+    we obtained via libcfgraph. We don't want to drop artifacts just because they
+    failed and we then added more recent artifacts to the table.
+    """
+    start_from = 1701843236881  # 2023-12-06 06:13:56 UTC
     to_add, null_ts_artifacts = [], []
     for artifact, ts, ext in sorted(
-        tqdm(new_artifacts(most_recent_ts), desc="Identifying artifacts to add"),
+        tqdm(new_artifacts(start_from), desc="Identifying artifacts to add"),
         key=lambda x: x[1],  # sort by timestamp
     ):
         if not ts:  # broken artifacts have ts = 0
@@ -322,9 +329,7 @@ def update_from_repodata(db):
             VALUES {values}
                 ON CONFLICT(artifact) DO NOTHING
             RETURNING *
-            """.format(
-                values=", ".join(f"('{name}', {ts})" for name, ts, _ in batch)
-            )
+            """.format(values=", ".join(f"('{name}', {ts})" for name, ts, _ in batch))
         )
         name_to_id = {name: id_ for id_, name, _ in ids}
         files_to_artifact = {}
@@ -351,10 +356,6 @@ def update_from_repodata(db):
                     for f in data.get("files", ()):
                         files_to_artifact.setdefault(f, []).append(name)
 
-                # if len(failed_artifacts) > 100:
-                #     print("Too many errors!", file=sys.stderr)
-                #     print(*failed_artifacts, sep="\n", file=sys.stderr)
-                #     sys.exit(1)
         db.executemany(
             """
             INSERT INTO PathToArtifactIds (path, basename, artifact_ids) 
@@ -376,16 +377,15 @@ def update_from_repodata(db):
             q = """
                 DELETE FROM Artifacts
                 WHERE artifact IN ({})
-                """.format(
-                    ", ".join(f"'{name}'" for name, _ in failed_artifacts)
-                )
+                """.format(", ".join(f"'{name}'" for name, _ in failed_artifacts))
             try:
                 db.execute(q)
             except sqlite3.OperationalError as exc:
                 print(q)
                 raise exc
             with open("failed_artifacts.txt", "a") as f:
-                f.write("\n".join(failed_artifacts) + "\n")
+                f.write("\n".join(map(str, failed_artifacts)))
+                f.write("\n")
         db.commit()
 
 
