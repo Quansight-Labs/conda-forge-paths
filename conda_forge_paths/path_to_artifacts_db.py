@@ -294,7 +294,7 @@ def new_artifacts(ts):
                 except Exception as e:
                     print(f"Error reading {repodata}: {e}")
                     continue
-                keys = {"packages": ".tar.bz", "packages.conda": ".conda"}
+                keys = {"packages": ".tar.bz2", "packages.conda": ".conda"}
                 for key, ext in keys.items():
                     for pkg, pkg_data in data.get(key, {}).items():
                         timestamp = pkg_data.get("timestamp", 0)
