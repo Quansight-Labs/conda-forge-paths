@@ -519,12 +519,15 @@ if __name__ == "__main__":
                     for i, line in enumerate(f, 1):
                         print(f"{i}.", line, file=sys.stderr)
                         if i >= 100:
-                            print("... more than 100 errors. Omitting.")
-                sys.exit(1)
+                            print(
+                                "... more than 100 errors. Omitting the rest.",
+                                file=sys.stderr,
+                            )
+                            break
             else:
                 # Update epoch timestamp because no errors happened :D
                 set_latest_successful_update()
-                sys.exit()
+            sys.exit()
 
     print(
         f"Usage: {sys.argv[0]} subcommand",
