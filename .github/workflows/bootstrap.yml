@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DB_PATH: ${{ github.workspace }}/path_to_artifacts.db
+  DB_PATH: path_to_artifacts.db
   PYTHONUNBUFFERED: 1
 
 jobs:
@@ -67,4 +67,4 @@ jobs:
         if: github.event_name != 'pull_request'
         with:
           name: database
-          path: ${{ env.DB_PATH }}.tar.zstd
+          path: ${{ github.workspace }}/${{ env.DB_PATH }}.tar.zstd
