@@ -409,7 +409,7 @@ def update_from_repodata(db):
                     failed_artifacts.append((name, str(exc)))
                 else:
                     if data is None:
-                        failed_artifacts((name, "Empty metadata payload"))
+                        failed_artifacts.append((name, "Empty metadata payload"))
                     else:
                         for f in data.get("files", ()):
                             files_to_artifact.setdefault(f, []).append(name)
