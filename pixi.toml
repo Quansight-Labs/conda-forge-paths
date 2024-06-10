@@ -10,7 +10,9 @@ platforms = ["linux-64", "osx-64", "win-64", "osx-arm64"]
 
 [dependencies]
 python = "3.12.*"
-conda-package-streaming = ">=0.10.0"
-conda-forge-metadata = ">=0.8"
-tqdm = "*"
+conda-package-streaming = ">=0.10.0,<1.0a0"
+conda-forge-metadata = ">=0.8,<1.0a0"
+tqdm = ">=4.66.4,<5.0a0"
+conda-oci-mirror = ">=0.1.0,<1.0a0"
+setuptools = ">=70.0.0,<71.0a0"
 
