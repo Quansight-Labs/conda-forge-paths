@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, UTC
 from itertools import batched, chain, product
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import urlretrieve
 
 from conda_forge_metadata.artifact_info import get_artifact_info_as_json
@@ -223,6 +224,31 @@ def count_artifacts(db):
         return row[0]
 
 
+def fetch_and_extract_one(url, dest):
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    # Download the file
+    attempts = 0
+    while attempts < 5:
+        try:
+            download_location, _ = urlretrieve(url)
+        except HTTPError:
+            time.sleep(1 * attempts)
+            continue
+        else:
+            try:
+                with open(download_location, "rb") as compressed, open(dest, "wb") as f:
+                    f.write(bz2.decompress(compressed.read()))
+                Path(download_location).unlink()
+            except OSError:
+                time.sleep(1 * attempts)
+                continue
+            else:
+                break
+    else:
+        raise RuntimeError(f"Could not download or extract URL: {url}")
+
+
 def fetch_repodata(
     subdirs=SUBDIRS,
     force_download=False,
@@ -239,15 +265,9 @@ def fetch_repodata(
         else:
             repodata = f"{prefix}/label/{label}/{subdir}/repodata.json"
         local_fn = Path(cache_dir, f"{subdir}.{label}.json")
-        local_fn_bz2 = Path(str(local_fn) + ".bz2")
         paths.append(local_fn)
         if force_download or not local_fn.exists():
-            local_fn.parent.mkdir(parents=True, exist_ok=True)
-            # Download the file
-            urlretrieve(f"{repodata}.bz2", local_fn_bz2)
-            with open(local_fn_bz2, "rb") as compressed, open(local_fn, "wb") as f:
-                f.write(bz2.decompress(compressed.read()))
-            local_fn_bz2.unlink()
+            fetch_and_extract_one(repodata + ".bz2", local_fn)
     return paths
 
 
