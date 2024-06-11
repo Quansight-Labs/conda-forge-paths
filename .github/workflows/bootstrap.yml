@@ -26,7 +26,7 @@ permissions:
   contents: write
 
 env:
-  DB_PATH: path_to_artifacts.db
+  DBNAME: path_to_artifacts
   PYTHONUNBUFFERED: 1
 
 jobs:
@@ -43,10 +43,10 @@ jobs:
       - name: Fetch latest release
         run: |
           set -x
-          curl -L -o path_to_artifacts.tar.zst \
-            https://github.com/jaimergp/conda-forge-paths/releases/latest/download/path_to_artifacts.tar.zst
-          tar xf path_to_artifacts.tar.zst
-          rm path_to_artifacts.tar.zst
+          curl -L -o ${DBNAME}.tar.zst \
+            https://github.com/jaimergp/conda-forge-paths/releases/latest/download/${DBNAME}.tar.zst
+          tar xf ${DBNAME}.tar.zst
+          rm ${DBNAME}.tar.zst
 
       - uses: prefix-dev/setup-pixi@v0.8.1
 
@@ -73,18 +73,28 @@ jobs:
 
       - name: Compress DB file
         run: |
-          ZSTD_NBTHREADS=$(nproc) ZSTD_CLEVEL=19 tar --zstd -cf path_to_artifacts.tar.zstd $DB_PATH
-          ls -alh path_to_artifacts.*
+          ZSTD_NBTHREADS=$(nproc) ZSTD_CLEVEL=19 tar --zstd -cf ${DBNAME}.tar.zstd ${DBNAME}.db
+          ls -alh ${DBNAME}.*
+      
+      - name: Generate SHA256 checksums
+        run: |
+          openssl sha256 ${DBNAME}.db ${DBNAME}.db.sha256
+          openssl sha256 ${DBNAME}.tar.zstd ${DBNAME}.tar.zstd.sha256
+      
+      - name: Remove uncompressed database
+        run: |
+          rm ${DBNAME}.db
+          rm ${DBNAME}.db-journal || true
 
       - name: "Upload Artifact"
         uses: actions/upload-artifact@v4
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         with:
           name: database
-          path: ${{ github.workspace }}/${{ env.DB_PATH }}.tar.zstd
+          path: ${{ env.DBNAME }}.*
           retention-days: 60
           compression-level: 0
-
+          
       - name: Publish weekly
         uses: softprops/action-gh-release@v2
         if: github.event_name == 'schedule'
@@ -92,7 +102,7 @@ jobs:
           draft: false
           name: "Latest Release"
           tag_name: "latest"
-          files: path_to_artifacts.tar.zstd
+          files: ${{ env.DBNAME }}.*
           fail_on_unmatched_files: true
           body: |
             Weekly snapshot of the conda-forge path-to-artifacts database.
@@ -106,7 +116,7 @@ jobs:
           draft: false
           name: ${{ steps.current-time.outputs.formattedTime }}
           tag_name: ${{ steps.current-time.outputs.formattedTime }}
-          files: path_to_artifacts.tar.zstd
+          files: ${{ env.DBNAME }}.*
           fail_on_unmatched_files: true
           body: |
             ${{ steps.current-time.outputs.formattedTime }} snapshot of the conda-forge path-to-artifacts database.
