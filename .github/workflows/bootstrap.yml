@@ -1,10 +1,17 @@
 name: Update database
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches:
+      - main
 
-env:
-  DB_PATH: ${{ github.workspace }}/path_to_artifacts.db
-  PYTHONUNBUFFERED: 1
+  pull_request:
+
+  workflow_dispatch:
+
+  schedule:
+    - cron: "0 5 * * 1" # Mondays @ 5am
+    - cron: "0 1 1 * *" # First day of the month @ 1am
 
 concurrency:
   # Concurrency group that uses the workflow name and PR number if available
@@ -14,6 +21,13 @@ concurrency:
   # merges to main will not cancel.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  DB_PATH: path_to_artifacts.db
+  PYTHONUNBUFFERED: 1
 
 jobs:
   update:
@@ -34,34 +48,65 @@ jobs:
           tar xf path_to_artifacts.tar.zst
           rm path_to_artifacts.tar.zst
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - uses: prefix-dev/setup-pixi@v0.8.1
 
       - name: Update database with most recent repodata
         run: |
           set -x
           ls -alh *.db
-          python conda_forge_paths/path_to_artifacts_db.py update-from-repodata
+          pixi run python conda_forge_paths/path_to_artifacts_db.py update-from-repodata
           ls -alh *.db
-      
+
       - name: Update FTS index
         run: |
           set -x
           ls -alh *.db
-          python conda_forge_paths/path_to_artifacts_db.py fts
+          pixi run python conda_forge_paths/path_to_artifacts_db.py fts
           ls -alh *.db
+
+      - name: Get current time
+        uses: josStorer/get-current-time@v2
+        id: current-time
+        with:
+          format: "YYYY-MM-DD"
+          utcOffset: "+00:00"
 
       - name: Compress DB file
         run: |
-          ZSTD_NBTHREADS=4 ZSTD_CLEVEL=19 tar --zstd -cf path_to_artifacts.tar.zstd $DB_PATH
+          ZSTD_NBTHREADS=$(nproc) ZSTD_CLEVEL=19 tar --zstd -cf path_to_artifacts.tar.zstd $DB_PATH
           ls -alh path_to_artifacts.*
 
       - name: "Upload Artifact"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         with:
           name: database
-          path: ${{ env.DB_PATH }}.tar.zstd
+          path: ${{ github.workspace }}/${{ env.DB_PATH }}.tar.zstd
+          retention-days: 60
+          compression-level: 0
+
+      - name: Publish weekly
+        uses: softprops/action-gh-release@v2
+        if: github.event_name == 'schedule'
+        with:
+          draft: false
+          name: "Latest Release"
+          tag_name: "latest"
+          files: path_to_artifacts.tar.zstd
+          fail_on_unmatched_files: true
+          body: |
+            Weekly snapshot of the conda-forge path-to-artifacts database.
+            Last updated on ${{ steps.current-time.outputs.formattedTime }}.
+            See the README for more information.
+
+      - name: Publish monthly or manually
+        uses: softprops/action-gh-release@v2
+        if: ( github.event_name == 'schedule' && endsWith(steps.current-time.outputs.formattedTime, '-01') ) || github.event_name == 'workflow_dispatch'
+        with:
+          draft: false
+          name: ${{ steps.current-time.outputs.formattedTime }}
+          tag_name: ${{ steps.current-time.outputs.formattedTime }}
+          files: path_to_artifacts.tar.zstd
+          fail_on_unmatched_files: true
+          body: |
+            ${{ steps.current-time.outputs.formattedTime }} snapshot of the conda-forge path-to-artifacts database.

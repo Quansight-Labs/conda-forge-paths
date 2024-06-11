@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, UTC
 from itertools import batched, chain, product
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import urlretrieve
 
 from conda_forge_metadata.artifact_info import get_artifact_info_as_json
@@ -43,6 +44,10 @@ def connect(bootstrap=False):
                 basename TEXT,
                 artifact_ids TEXT
             );
+            CREATE TABLE IF NOT EXISTS LatestSuccessfulUpdate (
+                id INTEGER PRIMARY KEY CHECK (id = 0),
+                timestamp INTEGER DEFAULT 0 NOT NULL
+            );
             PRAGMA journal_mode = OFF;
             PRAGMA synchronous = 0;
             PRAGMA cache_size = 1000000;
@@ -73,9 +78,12 @@ def bootstrap_from_libcfgraph_path_to_artifact(db, artifacts_dir):
                 )
                 for path in data["files"]:
                     mapping.setdefault(path, []).append(artifact)
-            yield artifacts_timestamp, (
-                (path, os.path.basename(path), artifacts)
-                for path, artifacts in mapping.items()
+            yield (
+                artifacts_timestamp,
+                (
+                    (path, os.path.basename(path), artifacts)
+                    for path, artifacts in mapping.items()
+                ),
             )
 
     db.execute("BEGIN")
@@ -156,7 +164,7 @@ def query(db, q, limit=100, fts=False):
             yield row
     else:
         for row in db.execute(
-            f"""
+            """
             SELECT artifact
             FROM Artifacts, PathToArtifactIds, json_each('[' || PathToArtifactIds.artifact_ids || ']') as each_id
             WHERE PathToArtifactIds.path = (?) AND each_id.value = Artifacts.id
@@ -166,7 +174,7 @@ def query(db, q, limit=100, fts=False):
             yield row
 
 
-def most_recent_artifact(db):
+def most_recent_artifact(db) -> tuple[str, int]:
     for row in db.execute(
         """
         SELECT artifact, timestamp
@@ -178,6 +186,34 @@ def most_recent_artifact(db):
         return row
 
 
+def get_latest_successful_update(db):
+    try:
+        for row in db.execute(
+            "SELECT timestamp from LatestSuccessfulUpdate WHERE id = 0"
+        ):
+            return row[0]
+    except sqlite3.OperationalError as exc:
+        print("!! Warning:", exc)
+        return 0
+
+
+def set_latest_successful_update(db, timestamp: int | None = None):
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS LatestSuccessfulUpdate (
+            id INTEGER PRIMARY KEY CHECK (id = 0),
+            timestamp INTEGER DEFAULT 0 NOT NULL
+        );
+        """
+    )
+    if timestamp is None:
+        _, timestamp = most_recent_artifact(db)
+    db.execute(
+        "UPDATE LatestSuccessfulUpdate SET timestamp = (?) WHERE id = 0",
+        (timestamp,),
+    )
+
+
 def count_artifacts(db):
     for row in db.execute(
         """
@@ -186,6 +222,31 @@ def count_artifacts(db):
         """
     ):
         return row[0]
+
+
+def fetch_and_extract_one(url, dest):
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    # Download the file
+    attempts = 0
+    while attempts < 5:
+        try:
+            download_location, _ = urlretrieve(url)
+        except HTTPError:
+            time.sleep(1 * attempts)
+            continue
+        else:
+            try:
+                with open(download_location, "rb") as compressed, open(dest, "wb") as f:
+                    f.write(bz2.decompress(compressed.read()))
+                Path(download_location).unlink()
+            except OSError:
+                time.sleep(1 * attempts)
+                continue
+            else:
+                break
+    else:
+        raise RuntimeError(f"Could not download or extract URL: {url}")
 
 
 def fetch_repodata(
@@ -204,15 +265,9 @@ def fetch_repodata(
         else:
             repodata = f"{prefix}/label/{label}/{subdir}/repodata.json"
         local_fn = Path(cache_dir, f"{subdir}.{label}.json")
-        local_fn_bz2 = Path(str(local_fn) + ".bz2")
         paths.append(local_fn)
         if force_download or not local_fn.exists():
-            local_fn.parent.mkdir(parents=True, exist_ok=True)
-            # Download the file
-            urlretrieve(f"{repodata}.bz2", local_fn_bz2)
-            with open(local_fn_bz2, "rb") as compressed, open(local_fn, "wb") as f:
-                f.write(bz2.decompress(compressed.read()))
-            local_fn_bz2.unlink()
+            fetch_and_extract_one(repodata + ".bz2", local_fn)
     return paths
 
 
@@ -239,7 +294,7 @@ def new_artifacts(ts):
                 except Exception as e:
                     print(f"Error reading {repodata}: {e}")
                     continue
-                keys = {"packages": ".tar.bz", "packages.conda": ".conda"}
+                keys = {"packages": ".tar.bz2", "packages.conda": ".conda"}
                 for key, ext in keys.items():
                     for pkg, pkg_data in data.get(key, {}).items():
                         timestamp = pkg_data.get("timestamp", 0)
@@ -287,19 +342,26 @@ def files_from_artifact(artifact):
 
 
 def update_from_repodata(db):
-    most_recent_name, most_recent_ts = most_recent_artifact(db)
+    """
+    The artifacts table always stores all the filenames in the repodata.
+    It serves as an inventory and also a todo list.
+
+    On Artifacts updates, we gather the newly added rows and use those
+    to query the actual info/ metadata remotely. These queries can fail
+    due to network issues and whatnot, so we catch potential exceptions
+    and delete those form the Artifacts table so they are retried eventually.
+    """
+    start_from = (
+        get_latest_successful_update(db) or 1701843236881
+    )  # Dec 2023 (last libcfgraph item)
     print(
-        "Most recent artifact:",
-        most_recent_name,
-        "@",
-        most_recent_ts / 1000,
-        datetime.fromtimestamp(most_recent_ts / 1000, UTC).strftime(
-            "%Y-%m-%d %H:%M:%S %Z"
-        ),
+        "Starting from",
+        start_from / 1000,
+        datetime.fromtimestamp(start_from / 1000, UTC).strftime("%Y-%m-%d %H:%M:%S %Z"),
     )
     to_add, null_ts_artifacts = [], []
     for artifact, ts, ext in sorted(
-        tqdm(new_artifacts(most_recent_ts), desc="Identifying artifacts to add"),
+        tqdm(new_artifacts(start_from), desc="Identifying artifacts to add"),
         key=lambda x: x[1],  # sort by timestamp
     ):
         if not ts:  # broken artifacts have ts = 0
@@ -322,9 +384,7 @@ def update_from_repodata(db):
             VALUES {values}
                 ON CONFLICT(artifact) DO NOTHING
             RETURNING *
-            """.format(
-                values=", ".join(f"('{name}', {ts})" for name, ts, _ in batch)
-            )
+            """.format(values=", ".join(f"('{name}', {ts})" for name, ts, _ in batch))
         )
         name_to_id = {name: id_ for id_, name, _ in ids}
         files_to_artifact = {}
@@ -345,13 +405,14 @@ def update_from_repodata(db):
                 name = futures[future]
                 try:
                     data = future.result()
-                except Exception:
-                    data = None
-                if data:
-                    for f in data.get("files", ()):
-                        files_to_artifact.setdefault(f, []).append(name)
+                except Exception as exc:
+                    failed_artifacts.append((name, str(exc)))
                 else:
-                    failed_artifacts.append(name)
+                    if data is None:
+                        failed_artifacts.append((name, "Empty metadata payload"))
+                    else:
+                        for f in data.get("files", ()):
+                            files_to_artifact.setdefault(f, []).append(name)
 
         db.executemany(
             """
@@ -371,16 +432,18 @@ def update_from_repodata(db):
         )
         if failed_artifacts:
             # Remove from the Artifacts table so we retry at some point
-            db.execute(
-                """
+            q = """
                 DELETE FROM Artifacts
                 WHERE artifact IN ({})
-                """.format(
-                    ", ".join(f"'{name}'" for name in failed_artifacts)
-                )
-            )
+                """.format(", ".join(f"'{name}'" for name, _ in failed_artifacts))
+            try:
+                db.execute(q)
+            except sqlite3.OperationalError as exc:
+                print(q)
+                raise exc
             with open("failed_artifacts.txt", "a") as f:
-                f.write("\n".join(failed_artifacts) + "\n")
+                f.write("\n".join(map(str, failed_artifacts)))
+                f.write("\n")
         db.commit()
 
 
@@ -424,6 +487,16 @@ if __name__ == "__main__":
             db.close()
             sys.exit()
 
+        if sys.argv[1] == "most-recent-successful-update":
+            db = connect()
+            ts = get_latest_successful_update(db)
+            print(
+                ts / 1000,
+                datetime.fromtimestamp(ts / 1000, UTC).strftime("%Y-%m-%d %H:%M:%S %Z"),
+            )
+            db.close()
+            sys.exit()
+
         if sys.argv[1] == "update-from-repodata":
             db = connect()
             print("Artifacts before update:", count_artifacts(db))
@@ -440,12 +513,14 @@ if __name__ == "__main__":
             failed = Path("failed_artifacts.txt")
             if failed.is_file():
                 print(
-                    "!! Couldn't fetch these artifacts, please retry:",
-                    failed.read_text(),
-                    sep="\n",
-                    file=sys.stderr,
+                    "!! Couldn't fetch these artifacts, please retry:", file=sys.stderr
                 )
-                sys.exit(1)
+                with open(failed) as f:
+                    for i, line in enumerate(f, 1):
+                        print(f"{i}.", line, end="", file=sys.stderr)
+            else:
+                # Update epoch timestamp because no errors happened :D
+                set_latest_successful_update()
             sys.exit()
 
     print(
@@ -453,9 +528,10 @@ if __name__ == "__main__":
         "subcommands:",
         "  - bootstrap /path/to/libcfgraph/artifacts/  # initialize the database",
         "  - fts                                       # index the full text search",
-        "  - find-artifacts <full path>               # find artifacts by full path",
+        "  - find-artifacts <full path>                # find artifacts by full path",
         "  - find-paths <path component>               # find full paths by partial matches",
         "  - update-from-repodata                      # update the database from current repodata",
+        "  - most-recent-artifact                      # print latest artifact in database",
         sep="\n",
     )
     sys.exit(1)
