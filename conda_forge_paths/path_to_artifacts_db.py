@@ -273,7 +273,7 @@ def fetch_repodata(
 
 def new_artifacts(ts):
     futures = []
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=20) as executor:
         for label, subdir in product(all_labels(use_remote_cache=True), SUBDIRS):
             future = executor.submit(
                 fetch_repodata, (subdir,), False, ".repodata_cache", label
@@ -311,7 +311,7 @@ def new_artifacts(ts):
 
 
 def files_from_artifact(artifact):
-    time.sleep(0.1)
+    time.sleep(0.05)
     channel, subdir, artifact = artifact.rsplit("/", 2)
     if "-" in channel:
         channel, label = channel.split("-", 1)
@@ -321,13 +321,16 @@ def files_from_artifact(artifact):
 
     if artifact.endswith(".conda"):
         # .conda artifacts can be streamed directly from an anaconda.org channel
-        return get_artifact_info_as_json(
+        data = get_artifact_info_as_json(
             channel=channel,
             subdir=subdir,
             artifact=artifact,
             backend="streamed",
             skip_files_suffixes=(),
         )
+        if data and data.get("name"):
+            return data
+
     # .tar.bz2 artifacts need to be downloaded and extracted, but the OCI mirror has
     # the info layer that we can use to get the files list
     data = get_artifact_info_as_json(
@@ -335,6 +338,18 @@ def files_from_artifact(artifact):
         subdir=subdir,
         artifact=artifact,
         backend="oci",
+        skip_files_suffixes=(),
+    )
+    if data and data.get("name"):
+        return data
+
+    # Last resort, we stream the tar.bz2 and hope is not too big.
+    # This is mostly for .tar.bz2 in labels.
+    data = get_artifact_info_as_json(
+        channel=channel,
+        subdir=subdir,
+        artifact=artifact,
+        backend="streamed",
         skip_files_suffixes=(),
     )
     if data and data.get("name"):
