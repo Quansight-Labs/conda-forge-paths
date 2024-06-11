@@ -75,12 +75,12 @@ jobs:
         run: |
           ZSTD_NBTHREADS=$(nproc) ZSTD_CLEVEL=19 tar --zstd -cf ${DBNAME}.tar.zstd ${DBNAME}.db
           ls -alh ${DBNAME}.*
-      
+
       - name: Generate SHA256 checksums
         run: |
-          openssl sha256 ${DBNAME}.db ${DBNAME}.db.sha256
-          openssl sha256 ${DBNAME}.tar.zstd ${DBNAME}.tar.zstd.sha256
-      
+          openssl sha256 ${DBNAME}.db > ${DBNAME}.db.sha256
+          openssl sha256 ${DBNAME}.tar.zstd > ${DBNAME}.tar.zstd.sha256
+
       - name: Remove uncompressed database
         run: |
           rm ${DBNAME}.db
@@ -94,10 +94,10 @@ jobs:
           path: ${{ env.DBNAME }}.*
           retention-days: 60
           compression-level: 0
-          
+
       - name: Publish weekly
         uses: softprops/action-gh-release@v2
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' && !endsWith(steps.current-time.outputs.formattedTime, '-01')
         with:
           draft: false
           name: "Latest Release"
