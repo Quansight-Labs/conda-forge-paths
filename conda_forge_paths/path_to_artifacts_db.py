@@ -517,13 +517,7 @@ if __name__ == "__main__":
                 )
                 with open(failed) as f:
                     for i, line in enumerate(f, 1):
-                        print(f"{i}.", line, file=sys.stderr)
-                        if i >= 100:
-                            print(
-                                "... more than 100 errors. Omitting the rest.",
-                                file=sys.stderr,
-                            )
-                            break
+                        print(f"{i}.", line, end="", file=sys.stderr)
             else:
                 # Update epoch timestamp because no errors happened :D
                 set_latest_successful_update()
