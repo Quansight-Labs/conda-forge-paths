@@ -273,7 +273,7 @@ def fetch_repodata(
 
 def new_artifacts(ts):
     futures = []
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    with ThreadPoolExecutor(max_workers=10) as executor:
         for label, subdir in product(all_labels(use_remote_cache=True), SUBDIRS):
             future = executor.submit(
                 fetch_repodata, (subdir,), False, ".repodata_cache", label
@@ -282,7 +282,11 @@ def new_artifacts(ts):
         for future in tqdm(
             as_completed(futures), total=len(futures), desc="Fetching repodata"
         ):
-            repodatas = future.result()
+            try:
+                repodatas = future.result()
+            except Exception as exc:
+                print("! Failed to download some labels:", exc, file=sys.stderr)
+                continue
             for repodata in repodatas:
                 subdir, label = repodata.stem.split(".", 1)
                 if label == "main":
@@ -405,7 +409,7 @@ def update_from_repodata(db):
         files_to_artifact = {}
         failed_artifacts = []
         futures = []
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        with ThreadPoolExecutor(max_workers=20) as executor:
             futures = {
                 executor.submit(files_from_artifact, name + ext): name
                 for name, _, ext in batch
