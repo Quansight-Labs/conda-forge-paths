@@ -329,15 +329,19 @@ def files_from_artifact(artifact):
 
     if artifact.endswith(".conda"):
         # .conda artifacts can be streamed directly from an anaconda.org channel
-        data = get_artifact_info_as_json(
-            channel=channel,
-            subdir=subdir,
-            artifact=artifact,
-            backend="streamed",
-            skip_files_suffixes=(),
-        )
-        if data and data.get("name"):
-            return data
+        try:
+            data = get_artifact_info_as_json(
+                channel=channel,
+                subdir=subdir,
+                artifact=artifact,
+                backend="streamed",
+                skip_files_suffixes=(),
+            )
+            if data and data.get("name"):
+                return data
+        except Exception as exc:
+            # Maybe we are lucky and the payload is in OCI :)
+            log.exception("Skipping %s", artifact, exc_info=exc)
 
     # .tar.bz2 artifacts need to be downloaded and extracted, but the OCI mirror has
     # the info layer that we can use to get the files list
@@ -492,6 +496,7 @@ def update_from_repodata(db):
 
 if __name__ == "__main__":
     logging.basicConfig()
+    logging.getLogger("urllib3").setLevel(logging.ERROR)
     if len(sys.argv) == 3:
         action = sys.argv[1]
         if action == "bootstrap":
