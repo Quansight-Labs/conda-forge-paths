@@ -20,10 +20,10 @@ if [[ $1 == "update" ]]; then
     fi
     mv extracted/path_to_artifacts.db path_to_artifacts.db
 
-    # curl -sfL -o datasette.update.yml \
-    #     https://github.com/Quansight-Labs/conda-forge-paths/releases/latest/download/datasette.yml \
-    #     && mv datasette.update.yml datasette.yml \
-    #     || true
+    curl -sfL -o datasette.update.yml \
+        https://raw.githubusercontent.com/Quansight-Labs/conda-forge-paths/main/datasette.yml \
+        && mv datasette.update.yml datasette.yml \
+        || true
 elif [[ $1 == "run" ]]; then
     export DATASETTE_SECRET=$(python -c 'import secrets; print(secrets.token_hex(32))')
     datasette serve \

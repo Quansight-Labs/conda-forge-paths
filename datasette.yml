@@ -1,5 +1,6 @@
 # Serve UI with:
 # datasette serve -i path_to_artifacts.db -m datasette.yml
+# This file is auto-updated from deploy.sh on every datasette restart
 databases:
   path_to_artifacts:
     queries:
