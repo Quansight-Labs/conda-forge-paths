@@ -12,7 +12,9 @@ from urllib.error import HTTPError
 from urllib.request import urlretrieve
 
 from conda_forge_metadata.artifact_info import get_artifact_info_as_json
+from conda_forge_metadata.artifact_info.info_json import info_json_from_tar_generator
 from conda_forge_metadata.repodata import SUBDIRS, all_labels
+from conda_forge_metadata.streaming import get_streamed_artifact_data
 
 try:
     from tqdm.auto import tqdm
@@ -347,13 +349,10 @@ def files_from_artifact(artifact):
     if data and data.get("name"):
         return data
 
-    # Last resort, we stream the tar.bz2 and hope is not too big.
-    # This is mostly for .tar.bz2 in labels.
-    data = get_artifact_info_as_json(
-        channel=channel,
-        subdir=subdir,
-        artifact=artifact,
-        backend="streamed",
+    # Last resort, we download the tar.bz2 and hope is not too big.
+    # This is mostly for .tar.bz2 artifacts in labels that are not OCI mirrored.
+    data = info_json_from_tar_generator(
+        get_streamed_artifact_data(channel, subdir, artifact),
         skip_files_suffixes=(),
     )
     if data and data.get("name"):
