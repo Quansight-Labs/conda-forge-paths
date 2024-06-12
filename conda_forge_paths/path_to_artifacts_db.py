@@ -1,5 +1,6 @@
 import bz2
 import json
+import logging
 import os
 import sqlite3
 import sys
@@ -28,6 +29,7 @@ except ImportError:
 
 
 DBPATH = "path_to_artifacts.db"
+log = logging.getLogger(__name__)
 
 
 def connect(bootstrap=False):
@@ -71,8 +73,8 @@ def bootstrap_from_libcfgraph_path_to_artifact(db, artifacts_dir):
             for path in batch:
                 try:
                     data = json.loads(path.read_text())
-                except Exception as e:
-                    print(f"Error reading {path}: {e}")
+                except Exception as exc:
+                    log.exception("Error reading %s", path, exc_info=exc)
                     continue
                 artifact = "/".join(["cf", path.parts[-2], path.stem])
                 artifacts_timestamp.append(
@@ -195,7 +197,7 @@ def get_latest_successful_update(db):
         ):
             return row[0]
     except sqlite3.OperationalError as exc:
-        print("!! Warning:", exc)
+        log.exception(exc)
         return 0
 
 
@@ -287,7 +289,7 @@ def new_artifacts(ts):
             try:
                 repodatas = future.result()
             except Exception as exc:
-                print("! Failed to download some labels:", exc, file=sys.stderr)
+                log.exception("! Failed to download some labels", exc_info=exc)
                 continue
             for repodata in repodatas:
                 subdir, label = repodata.stem.split(".", 1)
@@ -297,8 +299,8 @@ def new_artifacts(ts):
                     channel = f"cf-{label}"
                 try:
                     data = json.loads(repodata.read_text())
-                except Exception as e:
-                    print(f"Error reading {repodata}: {e}")
+                except Exception as exc:
+                    log.exception("Error reading %s", repodata, exc_info=exc)
                     continue
                 keys = {"packages": ".tar.bz2", "packages.conda": ".conda"}
                 for key, ext in keys.items():
@@ -440,7 +442,14 @@ def update_from_repodata(db):
                 try:
                     data = future.result()
                 except Exception as exc:
-                    failed_artifacts.append((name, str(exc)))
+                    exc_id = ".".join(
+                        [
+                            getattr(exc.__class__, "__module__", ""),
+                            exc.__class__.__name__,
+                        ]
+                    )
+                    failed_artifacts.append((name, f"{exc_id}: {exc}"))
+                    log.exception(exc)
                 else:
                     if data is None:
                         failed_artifacts.append((name, "Empty metadata payload"))
@@ -473,7 +482,7 @@ def update_from_repodata(db):
             try:
                 db.execute(q)
             except sqlite3.OperationalError as exc:
-                print(q)
+                log.error("Exception for query: %s", q)
                 raise exc
             with open("failed_artifacts.txt", "a") as f:
                 f.write("\n".join(map(str, failed_artifacts)))
@@ -482,6 +491,7 @@ def update_from_repodata(db):
 
 
 if __name__ == "__main__":
+    logging.basicConfig()
     if len(sys.argv) == 3:
         action = sys.argv[1]
         if action == "bootstrap":
@@ -545,12 +555,10 @@ if __name__ == "__main__":
             )
             failed = Path("failed_artifacts.txt")
             if failed.is_file():
-                print(
-                    "!! Couldn't fetch these artifacts, please retry:", file=sys.stderr
-                )
+                log.warning("Couldn't fetch these artifacts, please retry:")
                 with open(failed) as f:
                     for i, line in enumerate(f, 1):
-                        print(f"{i}.", line, end="", file=sys.stderr)
+                        log.warning("%s. %s", i, line)
             else:
                 # Update epoch timestamp because no errors happened :D
                 set_latest_successful_update(db)
