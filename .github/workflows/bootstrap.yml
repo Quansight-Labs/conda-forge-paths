@@ -74,7 +74,7 @@ jobs:
       - name: Compress DB file (for quick tests)
         if: github.event_name == 'push' || github.event_name == 'pull_request'
         run: |
-          ZSTD_NBTHREADS=$(nproc) ZSTD_CLEVEL=15 tar --zstd -cf ${DBNAME}.tar.zst ${DBNAME}.db
+          ZSTD_NBTHREADS=$(nproc) ZSTD_CLEVEL=9 tar --zstd -cf ${DBNAME}.tar.zst ${DBNAME}.db
           ls -alh ${DBNAME}.*
 
       - name: Compress DB file (for release)
