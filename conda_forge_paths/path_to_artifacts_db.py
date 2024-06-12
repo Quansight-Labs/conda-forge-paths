@@ -407,7 +407,7 @@ def update_from_repodata(db):
         key=lambda x: x[1],  # sort by timestamp
     ):
         if not ts:  # broken artifacts have ts = 0
-            null_ts_artifacts.append(artifact)
+            null_ts_artifacts.append((artifact, 0, ext))
         else:
             to_add.append((artifact, ts, ext))
 
@@ -429,13 +429,14 @@ def update_from_repodata(db):
             """.format(values=", ".join(f"('{name}', {ts})" for name, ts, _ in batch))
         )
         name_to_id = {name: id_ for id_, name, _ in ids}
+        name_to_ext = {name: ext for (name, _, ext) in batch if name in name_to_id}
         files_to_artifact = {}
         failed_artifacts = []
         futures = []
         with ThreadPoolExecutor(max_workers=20) as executor:
             futures = {
-                executor.submit(files_from_artifact, name + ext): name
-                for name, _, ext in batch
+                executor.submit(files_from_artifact, name + name_to_ext[name]): name
+                for name in name_to_id
             }
             for future in tqdm(
                 as_completed(futures),
@@ -551,7 +552,6 @@ if __name__ == "__main__":
                 ts / 1000,
                 datetime.fromtimestamp(ts / 1000, UTC).strftime("%Y-%m-%d %H:%M:%S %Z"),
             )
-            db.close()
             failed = Path("failed_artifacts.txt")
             if failed.is_file():
                 print(
