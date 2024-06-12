@@ -321,26 +321,41 @@ def files_from_artifact(artifact):
     channel, subdir, artifact = artifact.rsplit("/", 2)
     if "-" in channel:
         channel, label = channel.split("-", 1)
-        channel = "https://conda.anaconda.org/conda-forge/label/" + label
+        channels = (
+            "https://conda.anaconda.org/conda-forge/label/" + label,
+            "https://conda-web.anaconda.org/conda-forge/label/" + label,
+        )
     else:
-        channel = "conda-forge"
+        channels = ("conda-forge", "https://conda-web.anaconda.org/conda-forge")
 
     if artifact.endswith(".conda"):
         # .conda artifacts can be streamed directly from an anaconda.org channel
-        data = get_artifact_info_as_json(
-            channel=channel,
-            subdir=subdir,
-            artifact=artifact,
-            backend="streamed",
-            skip_files_suffixes=(),
-        )
-        if data and data.get("name"):
-            return data
+        try:
+            data = get_artifact_info_as_json(
+                channel=channels[0],
+                subdir=subdir,
+                artifact=artifact,
+                backend="streamed",
+                skip_files_suffixes=(),
+            )
+            if data and data.get("name"):
+                return data
+        except OSError:
+            # Try with non-CDN location
+            data = get_artifact_info_as_json(
+                channel=channels[1],
+                subdir=subdir,
+                artifact=artifact,
+                backend="streamed",
+                skip_files_suffixes=(),
+            )
+            if data and data.get("name"):
+                return data
 
     # .tar.bz2 artifacts need to be downloaded and extracted, but the OCI mirror has
     # the info layer that we can use to get the files list
     data = get_artifact_info_as_json(
-        channel=channel,
+        channel=channels[0],
         subdir=subdir,
         artifact=artifact,
         backend="oci",
@@ -351,12 +366,21 @@ def files_from_artifact(artifact):
 
     # Last resort, we download the tar.bz2 and hope is not too big.
     # This is mostly for .tar.bz2 artifacts in labels that are not OCI mirrored.
-    data = info_json_from_tar_generator(
-        get_streamed_artifact_data(channel, subdir, artifact),
-        skip_files_suffixes=(),
-    )
-    if data and data.get("name"):
-        return data
+    try:
+        data = info_json_from_tar_generator(
+            get_streamed_artifact_data(channels[0], subdir, artifact),
+            skip_files_suffixes=(),
+        )
+        if data and data.get("name"):
+            return data
+    except OSError:
+        # Try with non-CDN location
+        data = info_json_from_tar_generator(
+            get_streamed_artifact_data(channels[1], subdir, artifact),
+            skip_files_suffixes=(),
+        )
+        if data and data.get("name"):
+            return data
 
 
 def update_from_repodata(db):
