@@ -1,1 +1,1 @@
-0 6 * * 2 /usr/bin/systemctl restart datasette.service
+0 6 * * 2 root /usr/bin/systemctl restart datasette.service
