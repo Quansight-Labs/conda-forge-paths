@@ -538,7 +538,8 @@ if __name__ == "__main__":
                         print(f"{i}.", line, end="", file=sys.stderr)
             else:
                 # Update epoch timestamp because no errors happened :D
-                set_latest_successful_update()
+                set_latest_successful_update(db)
+            db.close()
             sys.exit()
 
     print(
