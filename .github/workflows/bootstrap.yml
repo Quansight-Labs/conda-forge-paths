@@ -73,13 +73,13 @@ jobs:
 
       - name: Compress DB file
         run: |
-          ZSTD_NBTHREADS=$(nproc) ZSTD_CLEVEL=19 tar --zstd -cf ${DBNAME}.tar.zstd ${DBNAME}.db
+          ZSTD_NBTHREADS=$(nproc) ZSTD_CLEVEL=19 tar --zstd -cf ${DBNAME}.tar.zst ${DBNAME}.db
           ls -alh ${DBNAME}.*
 
       - name: Generate SHA256 checksums
         run: |
           openssl sha256 ${DBNAME}.db > ${DBNAME}.db.sha256
-          openssl sha256 ${DBNAME}.tar.zstd > ${DBNAME}.tar.zstd.sha256
+          openssl sha256 ${DBNAME}.tar.zst > ${DBNAME}.tar.zst.sha256
 
       - name: Remove uncompressed database
         run: |
