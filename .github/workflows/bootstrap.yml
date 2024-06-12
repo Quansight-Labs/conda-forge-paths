@@ -44,7 +44,7 @@ jobs:
         run: |
           set -x
           curl -L -o ${DBNAME}.tar.zst \
-            https://github.com/jaimergp/conda-forge-paths/releases/latest/download/${DBNAME}.tar.zst
+            https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/${DBNAME}.tar.zst
           tar xf ${DBNAME}.tar.zst
           rm ${DBNAME}.tar.zst
 
