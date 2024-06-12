@@ -7,9 +7,9 @@ set -euxo pipefail
 
 if [[ $1 == "update" ]]; then
     curl -sfL -o path_to_artifacts.tar.zst \
-        https://github.com/jaimergp/conda-forge-paths/releases/latest/download/path_to_artifacts.tar.zst
+        https://github.com/Quansight-Labs/conda-forge-paths/releases/latest/download/path_to_artifacts.tar.zst
     curl -sfL -o path_to_artifacts.db.sha256 \
-        https://github.com/jaimergp/conda-forge-paths/releases/latest/download/path_to_artifacts.db.sha256
+        https://github.com/Quansight-Labs/conda-forge-paths/releases/latest/download/path_to_artifacts.db.sha256
     mkdir -p extracted
     tar xf path_to_artifacts.tar.zst -C extracted
     rm path_to_artifacts.tar.zst
@@ -21,7 +21,7 @@ if [[ $1 == "update" ]]; then
     mv extracted/path_to_artifacts.db path_to_artifacts.db
 
     # curl -sfL -o datasette.update.yml \
-    #     https://github.com/jaimergp/conda-forge-paths/releases/latest/download/datasette.yml \
+    #     https://github.com/Quansight-Labs/conda-forge-paths/releases/latest/download/datasette.yml \
     #     && mv datasette.update.yml datasette.yml \
     #     || true
 elif [[ $1 == "run" ]]; then
