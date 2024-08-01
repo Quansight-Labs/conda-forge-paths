@@ -94,7 +94,7 @@ jobs:
           rm ${DBNAME}.db-journal || true
 
       - name: "Upload Artifact"
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        uses: actions/upload-artifact@0b2256b8c012f0828dc542b3febcab082c67f72b # v4.3.4
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         with:
           name: database
@@ -103,7 +103,7 @@ jobs:
           compression-level: 0
 
       - name: Publish weekly
-        uses: softprops/action-gh-release@a74c6b72af54cfa997e81df42d94703d6313a2d0 # v2.0.6
+        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.0.8
         if: github.event_name == 'schedule' && !endsWith(steps.current-time.outputs.formattedTime, '-01')
         with:
           draft: false
@@ -117,7 +117,7 @@ jobs:
             See the README for more information.
 
       - name: Publish monthly or manually
-        uses: softprops/action-gh-release@a74c6b72af54cfa997e81df42d94703d6313a2d0 # v2.0.6
+        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.0.8
         if: ( github.event_name == 'schedule' && endsWith(steps.current-time.outputs.formattedTime, '-01') ) || github.event_name == 'workflow_dispatch'
         with:
           draft: false
@@ -135,4 +135,4 @@ jobs:
       actions: write
     steps:
       - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
-      - uses: gautamkrishnar/keepalive-workflow@05456e7809058d586d96392e99217726ccc10076 # v2.0.5
+      - uses: gautamkrishnar/keepalive-workflow@24ba73b43d5ea8d2b3d56fb9b8de951ba9a3dd18 # v2.0.6
