@@ -48,7 +48,7 @@ jobs:
           tar xf ${DBNAME}.tar.zst
           rm ${DBNAME}.tar.zst
 
-      - uses: prefix-dev/setup-pixi@92815284c57faa15cd896c4d5cfb2d59f32dc43d # v0.8.3
+      - uses: prefix-dev/setup-pixi@8eaba7c61d661f73d558b0b477156b7b62667fa4 # v0.8.4
 
       - name: Update database with most recent repodata
         run: |
@@ -94,7 +94,7 @@ jobs:
           rm ${DBNAME}.db-journal || true
 
       - name: "Upload Artifact"
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         with:
           name: database
@@ -135,4 +135,4 @@ jobs:
       actions: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: gautamkrishnar/keepalive-workflow@75c59336a3a6589777ab715d83668bb3033c68b2 # v2.0.9
+      - uses: gautamkrishnar/keepalive-workflow@2a8ae70f39b79fb50659d17ccc6f372f461813b2 # v2.0.10
