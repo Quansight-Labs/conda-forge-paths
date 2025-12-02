@@ -73,7 +73,7 @@ jobs:
           testing: false
 
       - name: Checkout repository
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
 
       - name: Fetch latest release
         run: |
@@ -83,7 +83,7 @@ jobs:
           tar xf ${DBNAME}.tar.zst
           rm ${DBNAME}.tar.zst
 
-      - uses: prefix-dev/setup-pixi@28eb668aafebd9dede9d97c4ba1cd9989a4d0004 # v0.9.2
+      - uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
 
       - name: Update database with most recent repodata
         run: |
@@ -138,7 +138,7 @@ jobs:
           compression-level: 0
 
       - name: Publish weekly
-        uses: softprops/action-gh-release@6da8fa9354ddfdc4aeace5fc48d7f679b5214090 # v2.4.1
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         if: github.event_name == 'schedule' && !endsWith(steps.current-time.outputs.formattedTime, '-01')
         with:
           draft: false
@@ -152,7 +152,7 @@ jobs:
             See the README for more information.
 
       - name: Publish monthly or manually
-        uses: softprops/action-gh-release@6da8fa9354ddfdc4aeace5fc48d7f679b5214090 # v2.4.1
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         if: ( github.event_name == 'schedule' && endsWith(steps.current-time.outputs.formattedTime, '-01') ) || github.event_name == 'workflow_dispatch'
         with:
           draft: false
