@@ -1,6 +1,6 @@
 #!/bin/bash
 
-. ~/miniconda3/etc/profile.d/conda.sh
+. ~/miniforge3/etc/profile.d/conda.sh
 conda activate datasette
 
 set -euxo pipefail
@@ -32,6 +32,7 @@ elif [[ $1 == "run" ]]; then
         -p "$DATASETTE_PORT" \
         --setting allow_download off \
         --setting allow_csv_stream off \
+        --setting sql_time_limit_ms 3000 \
         --setting max_csv_mb 10
 else
     echo "Unrecognized task: $1"

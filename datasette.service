@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=ubuntu
-Environment=DATASETTE_PORT=CHANGEME
+Environment=DATASETTE_PORT=8002
 WorkingDirectory=/home/ubuntu/datasette
 ExecStartPre=-bash deploy.sh update
 ExecStart=bash deploy.sh run

@@ -1,0 +1,6 @@
+name: datasette
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - datasette

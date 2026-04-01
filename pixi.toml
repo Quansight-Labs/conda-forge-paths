@@ -1,4 +1,4 @@
-[project]
+[workspace]
 name = "conda-forge-paths"
 version = "0.1.0"
 description = "Find which conda package provides a given file path"
@@ -16,3 +16,11 @@ tqdm = ">=4.66.4,<5.0a0"
 conda-oci-mirror = ">=0.1.0,<1.0a0"
 setuptools = ">=70.0.0,<71.0a0"
 
+[feature.datasette.dependencies]
+datasette = "*"
+[feature.datasette.tasks.app]
+cmd = "python -m datasette -m datasette.yml -i {{ database }}"
+args = ["database"]
+
+[environments]
+datasette = ["datasette"]

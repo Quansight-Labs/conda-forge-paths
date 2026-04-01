@@ -46,3 +46,31 @@ This repo is also preconfigured for a datasette deployment, which offers the sam
 ```
 $ datasette serve -i path_to_artifacts.db -m datasette.yml
 ```
+
+## Server deployment
+
+Given an Ubuntu VM with:
+
+- 2 vCPU
+- RAM 8GB
+- Disk 80GB
+- nginx, certbot for let's encrypt certs, miniforge installed to default path
+
+1. Clone this repo and `cd` into the new directory.
+2. Create a conda environment: `~/miniforge3/condabin/conda create -n datasette python datasette`.
+3. Edit `datasette.nginx` accordingly (domain, port) and enable the site:
+    ```bash
+    cp datasette.nginx /etc/nginx/sites-available/datasette
+    ln -s /etc/nginx/sites-available/datasette /etc/nginx/sites-enabled/
+    rm /etc/nginx/sites-enabled/default
+    nginx -t
+    systemctl reload nginx
+    ```
+4. Edit `datasette.service` accordingly (user, port) and copy it to `/etc/systemd/system/`.
+5. Enable and start the service:
+   ```bash
+   systemctl daemon-reload
+   systemctl enable datasette.service
+   systemctl start datasette.service
+   ```
+6. Wait a couple mins for the database to load. Check status with `systemctl status datasette` and logs with `journalctl -u datasette`.
