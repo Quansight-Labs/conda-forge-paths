@@ -38,7 +38,7 @@ jobs:
 
     steps:
       - name: Free Disk Space
-        uses: endersonmenezes/free-disk-space@e6ed9b02e683a3b55ed0252f1ee469ce3b39a885  # v3.1.0
+        uses: endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1  # v3.2.2
         with:
           remove_android: true
           remove_dotnet: true
@@ -83,7 +83,7 @@ jobs:
           tar xf ${DBNAME}.tar.zst
           rm ${DBNAME}.tar.zst
 
-      - uses: prefix-dev/setup-pixi@a0af7a228712d6121d37aba47adf55c1332c9c2e # v0.9.4
+      - uses: prefix-dev/setup-pixi@1b2de7f3351f171c8b4dfeb558c639cb58ed4ec0 # v0.9.5
 
       - name: Update database with most recent repodata
         run: |
@@ -129,7 +129,7 @@ jobs:
           rm ${DBNAME}.db-journal || true
 
       - name: "Upload Artifact"
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         with:
           name: database
@@ -138,7 +138,7 @@ jobs:
           compression-level: 0
 
       - name: Publish weekly
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
         if: github.event_name == 'schedule' && !endsWith(steps.current-time.outputs.formattedTime, '-01')
         with:
           draft: false
@@ -152,7 +152,7 @@ jobs:
             See the README for more information.
 
       - name: Publish monthly or manually
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
         if: ( github.event_name == 'schedule' && endsWith(steps.current-time.outputs.formattedTime, '-01') ) || github.event_name == 'workflow_dispatch'
         with:
           draft: false
