@@ -308,14 +308,14 @@ def new_artifacts(ts):
                         timestamp = pkg_data.get("timestamp", 0)
                         if timestamp > ts:
                             yield (
-                                f"{channel}/{subdir}/{pkg[:-len(ext)]}",
+                                f"{channel}/{subdir}/{pkg[: -len(ext)]}",
                                 timestamp,
                                 ext,
                             )
 
                 for pkg in data.get("removed", ()):
                     ext = ".tar.bz2" if pkg.endswith(".tar.bz2") else ".conda"
-                    yield (f"{channel}/{subdir}/{pkg[:-len(ext)]}", 0, ext)
+                    yield (f"{channel}/{subdir}/{pkg[: -len(ext)]}", 0, ext)
 
 
 def files_from_artifact(artifact):
@@ -408,6 +408,8 @@ def update_from_repodata(db):
         else:
             to_add.append((artifact, ts, ext))
 
+    # Record starting time to avoid timeouts in CI (6h max)
+    t0 = time.time()
     for batch in batched(
         tqdm(
             chain(to_add, null_ts_artifacts),
@@ -492,6 +494,11 @@ def update_from_repodata(db):
                 f.write("\n".join(map(str, failed_artifacts)))
                 f.write("\n")
         db.commit()
+
+        # If running from CI, stop after 4.5h
+        if os.environ.get("CI") and time.time() - t0 >= (3600 * 4.5):
+            print("CI mode; exiting early to avoid interruption!", file=sys.stderr)
+            break
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ on:
 
   schedule:
     - cron: "0 5 * * 1" # Mondays @ 5am
+    - cron: "0 5 * * 4" # Thursdays @ 5am
     - cron: "0 1 1 * *" # First day of the month @ 1am
 
 concurrency:
