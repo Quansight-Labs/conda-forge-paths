@@ -39,7 +39,7 @@ jobs:
 
     steps:
       - name: Free Disk Space
-        uses: endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1  # v3.2.2
+        uses: endersonmenezes/free-disk-space@2a22f8c59cae9cddae7194b33e6b92d023b2b4b8  # v4.0.0
         with:
           remove_android: true
           remove_dotnet: true
@@ -74,7 +74,7 @@ jobs:
           testing: false
 
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Fetch latest release
         run: |
@@ -84,7 +84,7 @@ jobs:
           tar xf ${DBNAME}.tar.zst
           rm ${DBNAME}.tar.zst
 
-      - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
+      - uses: prefix-dev/setup-pixi@d3f436a425481402e6a95a1d1fc10331c708cd9e # v0.10.2
 
       - name: Update database with most recent repodata
         run: |
@@ -139,7 +139,7 @@ jobs:
           compression-level: 0
 
       - name: Publish weekly
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         if: github.event_name == 'schedule' && !endsWith(steps.current-time.outputs.formattedTime, '-01')
         with:
           draft: false
@@ -153,7 +153,7 @@ jobs:
             See the README for more information.
 
       - name: Publish monthly or manually
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         if: ( github.event_name == 'schedule' && endsWith(steps.current-time.outputs.formattedTime, '-01') ) || github.event_name == 'workflow_dispatch'
         with:
           draft: false
